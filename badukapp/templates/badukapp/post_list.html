@@ -1,0 +1,538 @@
+{% extends 'badukapp/base.html' %}
+{% load static %}
+
+{% block content %}
+<nav id="create" class="w-full z-30 top-0 px-6 py-1">
+    <div class="w-full container mx-auto flex flex-wrap items-center justify-between mt-0 px-2 py-3">
+
+        <a class="uppercase tracking-wide no-underline hover:no-underline font-bold text-gray-800 text-xl " href="#">
+맵 제작하기
+</a>
+  </div>
+</nav>
+
+<div id="capture" class="relative flex-auto flex-row" style="width:888px; height:888px;">
+  <div style="position:absolute;">
+    <canvas id="grid2" style="background-image: url({% static 'img/base.jpg' %}); position:absolute; width:888.8px; height:888.8px;"></canvas>
+    <canvas id="grid3" style="background-image: url({% static 'img/board.svg' %}); position:absolute; width:804px; height:804px; margin: 43px;"></canvas>
+    <canvas id="grid" style="position:absolute;"></canvas>
+  </div>
+</div>
+<div class="relative xl:w-1/4 px-6 py-6 self-center flex-auto flex-row">
+  <div class="whiteScore">
+    백이 잡은 돌 : 0
+  </div>
+  <div class="blackScore">
+    흑이 잡은 돌 : 0
+  </div>
+  <div class="inline-flex">
+    <button class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-l" onclick="prevButton()">
+      Prev
+    </button>
+    <button class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-r" onclick="nextButton()">
+      Next
+    </button>
+  </div>
+  <div class="flex-auto my-8">
+    <form id="mapPost" action="{% url 'create_map' %}" method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="author" id="author">
+      <label class="block">
+        <span class="text-gray-700">이름: </span>
+        <input type="text" name="title" id="title" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="맵 이름">
+      </label>
+      <label class="block">
+        <span class="text-gray-700">설명: </span>
+        <textarea class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="description" name="description" rows="3" placeholder="맵 설명"></textarea>
+      </label>
+    </form>
+    <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 border border-blue-700 rounded" onclick="postImage()">
+      게시판에 올리기
+    </button>
+  </div>
+</div>
+<script type="text/javascript">
+  let is_authenticated = "{{request.user.is_authenticated}}"
+  let clickArray = [];
+  let clickArrayIdx = 0;
+  let playSoundClick = function(){
+    let obj = document.createElement("audio");
+    obj.src = "{% static 'sound/click.mp3' %}";
+    obj.volume = 0.5;
+    obj.autoPlay = false;
+    obj.preLoad = true;
+    obj.play();
+  }
+  let whiteDum = 0;
+  let blackDum = 0;
+  let whiteDead = 0;
+  let blackDead = 0;
+  let stoneNum = 0;
+  let turn = 0;
+  let gridArray = new Array(19);
+  let flagArray = new Array(19);
+  let mouseArray = new Array(19);
+  let smallGrid;
+  let grid;
+  for(let i=0;i<gridArray.length;i++){
+    gridArray[i] = new Array(gridArray.length).fill(0);
+    flagArray[i] = new Array(flagArray.length).fill(0);
+    mouseArray[i] = new Array(flagArray.length).fill(0);
+  }
+  let postImage = function(){
+    let author_name;
+    if (is_authenticated)
+      author_name = "{{request.user.username}}";
+    else
+      author_name = "guest";
+
+    let frm = document.getElementById("mapPost");
+    let myImage = document.getElementById('image');
+    let author = document.getElementById('author');
+
+    author.value = author_name;
+
+    html2canvas(document.getElementById('capture'), {width: 888, height: 888, scale: 0.907}).then(function(canvas) {
+      let imgDataUrl = canvas.toDataURL("image/png");
+      var formData = new FormData();
+
+      //var imgDataUrl = canvas.toDataURL('image/png');
+
+      var blobBin = atob(imgDataUrl.split(',')[1]);	// base64 데이터 디코딩
+      var array = [];
+      for (var i = 0; i < blobBin.length; i++) {
+          array.push(blobBin.charCodeAt(i));
+      }
+      var file = new Blob([new Uint8Array(array)], {type: 'image/png'});
+
+      formData.append('title', $('#title').val());
+      formData.append('description', $('#description').val());
+      formData.append('author', author_name);
+      formData.append('image', file);
+      formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+      $.ajax({
+        type: 'POST',
+        url: '{% url "create_map" %}',
+        data: formData,
+        cache: false,
+        processData: false,
+        contentType: false,
+        enctype: 'multipart/form-data',
+        success: function (){
+            alert('The post has been created!')
+            window.location.replace("{% url 'home' %}");
+        },
+        error: function(xhr, errmsg, err) {
+            console.log(xhr.status + ":" + xhr.responseText)
+        }
+      });
+    });
+  }
+  var drawGrid = function(w, id) {
+    var canvas = document.getElementById(id);
+    let ctx = canvas.getContext('2d');
+    ctx.canvas.width  = w;
+    ctx.canvas.height = w;
+
+    smallGrid = w/20;
+    let smallGridPath = "M "+smallGrid+" 0 L 0 0 0 "+smallGrid;
+
+    var data = '<svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"> \
+        <defs> \
+            <pattern id="smallGrid" width="'+smallGrid+'" height="'+smallGrid+'"> \
+                <path d="'+smallGridPath+'" fill="none" stroke="black" stroke-width="0" /> \
+            </pattern> \
+        </defs> \
+    </svg>';
+
+    var DOMURL = window.URL || window.webkitURL || window;
+
+    var img = new Image();
+    var svg = new Blob([data], {type: 'image/svg+xml;charset=utf-8'});
+    var url = DOMURL.createObjectURL(svg);
+
+    img.crossOrigin = 'anonymous'
+    img.onload = function () {
+      ctx.drawImage(img, 0, 0);
+    }
+    img.src = url;
+  }
+  let beforeMouseXY = [];
+  const canvas = document.getElementById('grid');
+  const radius = 20;
+  const ctx = canvas.getContext("2d");
+
+  let prevButton = function(){
+    if(clickArrayIdx>0){
+      let [x,y] = stringToIntPoint(clickArray[clickArrayIdx-1]);
+      xReal = y*smallGrid-radius+44.4;
+      yReal = x*smallGrid-radius+44.4;
+      clickArrayIdx -= 1;
+      console.log("제거4")
+      ctx.clearRect(xReal,yReal,radius*2,radius*2);
+    }
+  }
+  let nextButton = function(){
+    if(clickArray.length<=clickArrayIdx){
+      //alert("다음 수가 없습니다");
+    }
+    else{
+      clickArrayIdx += 1;
+      console.log("nextClick:"+clickArray[clickArrayIdx-1])
+      let [x,y] = stringToIntPoint(clickArray[clickArrayIdx-1]);
+      xReal = (y+1)*smallGrid;
+      yReal = (x+1)*smallGrid;
+      console.log("추가4")
+      ctx.beginPath();
+      ctx.arc(xReal, yReal, radius-1, 0, Math.PI * 2, true); // Outer circle
+      ctx.strokeStyle = (clickArrayIdx%2!=0)?"#232323":"#D1D1D1";
+      ctx.fillStyle = (clickArrayIdx%2!=0)?"#232323":"#D1D1D1";
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  canvas.onclick = function(event){
+    let target = document.getElementById("grid");
+    let targetTop = target.getBoundingClientRect().top;
+    let targetLeft = target.getBoundingClientRect().left;
+    console.log(event.clientX+"/"+event.clientY)
+    let x = event.clientX - ctx.canvas.offsetLeft - targetLeft; //실제 클릭한 좌표
+    let y = event.clientY - ctx.canvas.offsetTop - targetTop;
+    console.log("x :"+x+" y :"+y);
+    let xGrid = Math.round(x/smallGrid); //클릭한 착수점
+    let yGrid = Math.round(y/smallGrid);
+    console.log("x: "+xGrid+" y:"+yGrid);
+    let xFake = xGrid-1;
+    let yFake = yGrid-1;
+    console.log("xFake: "+xFake+" yFake:"+yFake);
+    if(!(18>=xFake && xFake>=0 && 18>=yFake && yFake>=0)){
+      //alert("착수 불가");
+    }
+    else{
+      if(gridArray[yFake][xFake]>0){
+        //alert("착수 불가");
+      }
+      else{
+        gridArray[yFake][xFake]=turn+1;
+        let xReal = xGrid*smallGrid; //클릭한 착수점의 실제 좌표
+        let yReal = yGrid*smallGrid;
+        //ctx.clearRect(xReal-radius,yReal-radius,radius*2,radius*2);
+        console.log("x :"+xReal+" y :"+yReal);
+        console.log("click: "+intToStringPoint(yFake, xFake));
+        [gridArray,removeArr,cantclickArr] = findAlive(gridArray, turn);
+        if(cantclickArr.length>0 && cantclickArr.indexOf(intToStringPoint(yFake, xFake))){
+          console.log("착수불가 : "+cantclickArr)
+          //alert("착수불가");
+          gridArray[yFake][xFake]=0;
+        }
+        else{
+          playSoundClick();
+          stoneNum += 1;
+          clickArray.push(intToStringPoint(yFake, xFake));
+          clickArrayIdx += 1;
+          console.log(stoneNum+"수 진행 중");
+          ctx.beginPath();
+          ctx.arc(xReal, yReal, radius-1, 0, Math.PI * 2, true); // Outer circle
+          ctx.strokeStyle = (turn==0)?"#232323":"#D1D1D1";
+          ctx.fillStyle = (turn==0)?"#232323":"#D1D1D1";
+          ctx.fill();
+          ctx.stroke();
+          turn = turn == 0;
+        }
+        if(removeArr.length>0){
+          //alert("test!");
+          console.log(removeArr);
+          for(let i=0;i<removeArr.length;i++){
+            [x,y] = stringToIntPoint(removeArr[i]);
+            xReal = y*smallGrid-radius+44.4;
+            yReal = x*smallGrid-radius+44.4;
+            console.log("x: "+y+"/ y: "+x);
+            console.log("xReal: "+xReal+"/ yReal: "+yReal);
+            console.log("제거3-"+i)
+            ctx.clearRect(xReal,yReal,radius*2,radius*2);
+            let scoreString = (turn == 0)?"white":"black";
+            if(turn == 0)
+              whiteDead += 1;
+            else
+              blackDead += 1;
+            let dead = (turn == 0)?whiteDead:blackDead;
+            let score = document.getElementsByClassName(scoreString+"Score")[0];
+            score.innerText = scoreString+" 죽은 돌 : "+dead;
+            /*
+            ctx.strokeStyle = "black";
+            ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            ctx.moveTo(xReal+radius, yReal);
+            ctx.lineTo(xReal+radius, yReal+radius*2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(xReal, yReal+radius);
+            ctx.lineTo(xReal+radius*2, yReal+radius);
+            ctx.stroke();
+            */
+          }
+        }
+        console.log("turn : "+turn);
+      }
+    }
+  }
+  canvas.addEventListener('mousemove', e => {
+    let target = document.getElementById("grid");
+    let targetTop = target.getBoundingClientRect().top;
+    let targetLeft = target.getBoundingClientRect().left;
+    let x = event.clientX - ctx.canvas.offsetLeft - targetLeft; //실제 클릭한 좌표
+    let y = event.clientY - ctx.canvas.offsetTop - targetTop;
+    let xGrid = Math.round(x/smallGrid); //클릭한 착수점
+    let yGrid = Math.round(y/smallGrid);
+    let xFake = xGrid-1;
+    let yFake = yGrid-1;
+    let xReal = xGrid*smallGrid; //클릭한 착수점의 실제 좌표
+    let yReal = yGrid*smallGrid;
+    if(!(18>=xFake && xFake>=0 && 18>=yFake && yFake>=0)){
+      //alert("착수 불가");
+    }
+    else{
+      if(gridArray[yFake][xFake]>0){
+        //alert("착수 불가");
+        if(beforeMouseXY[0]!=xReal || beforeMouseXY[1]!=yReal){
+          //console.log("제거2")
+          ctx.clearRect(beforeMouseXY[0]-radius,beforeMouseXY[1]-radius,radius*2,radius*2);
+        }
+        beforeMouseXY = []
+      }
+      else{
+        if((beforeMouseXY[0]!=xReal || beforeMouseXY[1]!=yReal) && beforeMouseXY.length>0){
+          console.log("beforeX: "+beforeMouseXY[0]+"/beforeY: "+beforeMouseXY[1])
+          //console.log("제거1")
+          ctx.clearRect(beforeMouseXY[0]-radius,beforeMouseXY[1]-radius,radius*2,radius*2);
+        }
+        if(beforeMouseXY[0]!=xReal || beforeMouseXY[1]!=yReal || beforeMouseXY.length==0){
+          beforeMouseXY = [xReal, yReal];
+          ctx.beginPath();
+          ctx.arc(xReal, yReal, radius-1, 0, Math.PI * 2, true); // Outer circle
+          ctx.strokeStyle = (turn==0)?"#232323":"#D1D1D1";
+          ctx.fillStyle = (turn==0)?"#232323":"#D1D1D1";
+          ctx.globalAlpha = 0.7;
+          ctx.fill();
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+  });
+  let intToStringPoint = function(x,y){
+    //이 함수는 for문에서 i,j값이 들어가는데 i,j값은 gridArray x,y값과 반대이므로 x와 y값이 바뀌어서 들어가야 한다
+    let xText = String.fromCharCode(65+y);
+    let yText = 19-x;
+    //console.log("int->string:"+xText+yText);
+    return (xText+yText);
+  }
+  let stringToIntPoint = function(x){
+    //이 함수는 리턴값은 gridArray의 x,y좌표값이므로 x,y값이 바뀌어서 나와야 한다
+    //console.log("여기서 확인")
+    //console.log(x)
+    //console.log(x.charCodeAt(0))
+    let xText = x.charCodeAt(0)-65;
+    let yText = 19-Number(x.substring(1));
+    //console.log("string->int:"+yText+"/"+xText);
+    return [yText,xText];
+  }
+  let findFull = function(arrayAll, array){
+    for(let i=0;i<array.length;i++){
+      let [x,y]=stringToIntPoint(array[i])
+      if(arrayAll[x][y]==0){
+        return 0;
+      }
+    }
+    return 1;
+  }
+  let findDead = function(arrayAll, array, color) {
+    //주변 4개의 돌 모두 다른 색이면 1 반환, 하나라도 같은 색이면 0 반환
+    let sum=0;
+    for(let i=0;i<array.length;i++){
+      let [x,y] = stringToIntPoint(array[i]);
+      sum += arrayAll[x][y];
+    }
+    if (sum==array.length*(3-color)){
+      return 1;
+    }
+    else {
+      return 0;
+    }
+  }
+  let grouping = function(arrayAll, array, idx, color){
+    //주변의 네 돌이 같은 색인지 확인하고 같은 색인 경우 이를 그룹배열에 추가해 반환하는 함수
+    imsiArr = [...array];
+    for(let i=idx;i<array.length;i++){
+      let [x, y] = stringToIntPoint(array[i]);
+      let areaArr = [];
+      if(x!=0)
+        areaArr.push(intToStringPoint(x-1,y));
+      if(x!=18)
+        areaArr.push(intToStringPoint(x+1,y));
+      if(y!=0)
+        areaArr.push(intToStringPoint(x,y-1));
+      if(y!=18)
+        areaArr.push(intToStringPoint(x,y+1));
+      if(findFull(arrayAll, areaArr)==0){
+        //같은 그룹 중에 하나라도 공백과 맞닿아있으면 이 그룹은 살아있는 돌
+        flagArray[x][y]=1;
+        console.log(intToStringPoint(x, y)+" 공백과 닿아있음")
+        return [imsiArr, -1];
+      }
+      else{
+        //공백과 전혀 안 닿아있을 때
+        for(let j=0;j<areaArr.length;j++){
+          let [n, m] = stringToIntPoint(areaArr[j]);
+          if(array.includes(intToStringPoint(n,m))==0 && color==arrayAll[n][m] && flagArray[n][m]==0){
+          //주변 4개의 돌 중 하나라도 같은 색이고 그 돌이 기존의 그룹 배열에 포함되어있지 않다면
+            imsiArr.push(intToStringPoint(n,m));
+          }
+          if (color==arrayAll[n][m]){
+            flagArray[n][m]=1;
+          }
+        }
+        flagArray[x][y]=1;
+      }
+    }
+    console.log(imsiArr)
+    return [imsiArr, array.length];
+  }
+  let findAlive = function(array, turn){
+    let string=""
+    for(let i=0;i<array.length;i++){
+      for(let j=0;j<array.length;j++){
+        string+=" "+array[i][j];
+      }
+      string+="\n";
+    }
+    console.log(string);
+    string2=""
+    for(let i=0;i<flagArray.length;i++){
+      for(let j=0;j<flagArray.length;j++){
+        string2+=" "+flagArray[i][j];
+      }
+      string2+="\n";
+    }
+    console.log(string2);
+    let removeArr = [];
+    let cantclickArr = [];
+    for(let i=0;i<array.length;i++){
+      for(let j=0;j<array.length;j++){
+        if(18>=i && i>=0 && 18>=j && j>=0){
+          if(array[i][j]>0 && flagArray[i][j]==0){
+            //아직 검사하지 않은 좌표면서 방금 턴과 다른 색깔의 돌만 검사함
+            //->모두 검사하고 같은 색깔의 돌일 경우 착수불가, 다른 색깔일 경우 pass로
+            console.log("array : "+array[i][j]+"/ turn:"+ (turn+1))
+            let areaArr = [];
+            let areaSameArr = [];
+            let orderArr = [];
+            let stringPoint = intToStringPoint(i,j);
+            let color=array[i][j];
+            areaArr = [];
+            if(i!=0)
+              areaArr.push(intToStringPoint(i-1,j));
+            if(i!=18)
+              areaArr.push(intToStringPoint(i+1,j));
+            if(j!=0)
+              areaArr.push(intToStringPoint(i,j-1));
+            if(j!=18)
+              areaArr.push(intToStringPoint(i,j+1));
+            //console.log(areaArr)
+            if(findFull(array, areaArr)==1){
+              //주변에 4개의 돌이 꽉 차있을때
+              if(findDead(array, areaArr, color)==1){
+                //주변 4개의 돌이 모두 다른 색이면 죽음
+                array[i][j]=0;
+                removeArr.push(intToStringPoint(i,j));
+                console.log("심각한 오류")
+              }
+              else{
+                //주변 4개의 돌 중 하나라도 같은 색이면
+                areaSameArr.push(intToStringPoint(i,j));
+                //자기자신을 그룹배열에 넣고
+                for(let s=0;s<areaArr.length;s++){
+                  [x, y] = stringToIntPoint(areaArr[s]);
+                  if(array[x][y]==color){
+                    areaSameArr.push(areaArr[s]);
+                    //같은색인 점을 같은그룹배열에 넣음
+                  }
+                }
+                //console.log(areaSameArr)
+                let repeat=0;
+                let real=0;
+                while(1){
+                  console.log(areaSameArr);
+                  console.log(repeat);
+                  console.log(color);
+                  real+=1;
+                  imsiArrLen = areaSameArr.length;
+                  [areaSameArr, repeat] = grouping(array, areaSameArr, repeat, color);
+                  console.log("repeat : "+repeat);
+                  console.log(imsiArrLen);
+                  console.log(areaSameArr);
+                  if(repeat==-1){
+                    string2=""
+                    for(let i=0;i<flagArray.length;i++){
+                      for(let j=0;j<flagArray.length;j++){
+                        string2+=" "+flagArray[i][j];
+                      }
+                      string2+="\n";
+                    }
+                    console.log(string2);
+                    console.log("살아있는 돌임");
+                    break;
+                  }
+                  else if(imsiArrLen==areaSameArr.length && array[i][j] == 2-turn){
+                    //제거해야 할 대상인데 클릭한 것과 다른 색이면 제거 배열에 추가
+                    console.log("죽은 돌임");
+                    for(let i=0;i<areaSameArr.length;i++){
+                      console.log(areaSameArr[i]);
+                      [x,y]=stringToIntPoint(areaSameArr[i]);
+                      array[x][y]=0;
+                      removeArr.push(areaSameArr[i]);
+                    }
+                    //Array.prototype.push.apply(removeArr, areaSameArr);
+                    break;
+                  }
+                  else if(imsiArrLen==areaSameArr.length && array[i][j] == turn+1){
+                    //제거해야 할 대상인데 클릭한 것과 같은 색이면 착수불가 배열에 추가
+                    console.log("착수 불가라서 안 죽음");
+                    for(let i=0;i<areaSameArr.length;i++){
+                      console.log(areaSameArr[i]);
+                      [x,y]=stringToIntPoint(areaSameArr[i]);
+                      cantclickArr.push(areaSameArr[i]);
+                    }
+                    //Array.prototype.push.apply(removeArr, areaSameArr);
+                    break;
+                  }
+                  if(real>=20){
+                    console.log("error");
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+        flagArray[i][j]=1;
+        //검사한 좌표
+      }
+    }
+    if(removeArr.length>0 && cantclickArr.length>0){
+      //제거 배열도 있고 제거x 배열도 있으면 착수 가능한 상황이라는 것.
+      cantclickArr = [];
+    }
+    for(let i=0;i<flagArray.length;i++){
+      for(let j=0;j<flagArray.length;j++){
+        flagArray[i][j]=0;
+      }
+    }
+    return [array,removeArr,cantclickArr];
+  }
+  drawGrid(888.8, "grid");
+  </script>
+
+
+{% endblock %}
