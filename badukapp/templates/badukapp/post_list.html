@@ -158,9 +158,10 @@
     img.src = url;
   }
   let beforeMouseXY = [];
-  const canvas = document.getElementById('grid');
+  let canvas = document.getElementById('grid');
+  let ctx = canvas.getContext("2d");
+
   const radius = 20;
-  const ctx = canvas.getContext("2d");
 
   let prevButton = function(){
     if(clickArrayIdx>0){
@@ -193,6 +194,8 @@
   }
 
   canvas.onclick = function(event){
+    let canvas = document.getElementById('grid');
+    let ctx = canvas.getContext("2d");
     let target = document.getElementById("grid");
     let targetTop = target.getBoundingClientRect().top;
     let targetLeft = target.getBoundingClientRect().left;
@@ -221,7 +224,10 @@
         console.log("x :"+xReal+" y :"+yReal);
         console.log("click: "+intToStringPoint(yFake, xFake));
         [gridArray,removeArr,cantclickArr] = findAlive(gridArray, turn);
-        if(cantclickArr.length>0 && cantclickArr.indexOf(intToStringPoint(yFake, xFake))){
+        if(cantclickArr.length>0){
+          console.log("cantclick: "+cantclickArr)
+        }
+        if(cantclickArr.length>0 && cantclickArr.indexOf(intToStringPoint(yFake, xFake)>-1)){
           console.log("착수불가 : "+cantclickArr)
           //alert("착수불가");
           gridArray[yFake][xFake]=0;
@@ -232,45 +238,57 @@
           clickArray.push(intToStringPoint(yFake, xFake));
           clickArrayIdx += 1;
           console.log(stoneNum+"수 진행 중");
-          ctx.beginPath();
-          ctx.arc(xReal, yReal, radius-1, 0, Math.PI * 2, true); // Outer circle
-          ctx.strokeStyle = (turn==0)?"#232323":"#D1D1D1";
-          ctx.fillStyle = (turn==0)?"#232323":"#D1D1D1";
-          ctx.fill();
-          ctx.stroke();
           turn = turn == 0;
+          xReal = xGrid*smallGrid;
+          yReal = yGrid*smallGrid;
+          ctx.beginPath();
+          //ctx.strokeStyle = (turn!=0)?"#232323":"#D1D1D1";
+          ctx.fillStyle = (turn!=0)?"#232323":"#D1D1D1";
+          ctx.arc(xReal, yReal, radius-1, 0, Math.PI * 2, true); // Outer circle
+          ctx.fill();
+          setTimeout(function() {
+            for(let i=0;i<clickArray.length;i++){
+              let [y,x]=stringToIntPoint(clickArray[i]);
+              let turn = i%2==0;
+              //console.log("turn : "+turn)
+              //console.log("array: "+gridArray[y][x]);
+              //turn이 1이면 i가 짝수이므로 백
+              //turn이 0이면 i가 홀수이므로 흑
+              if (gridArray[y][x]==2-turn){
+                let xReal = x*smallGrid-radius+44.4;
+                let yReal = y*smallGrid-radius+44.4;
+                ctx.clearRect(xReal,yReal,radius*2,radius*2);
+                let xGrid=x+1;
+                let yGrid=y+1;
+                xReal = xGrid*smallGrid;
+                yReal = yGrid*smallGrid;
+                ctx.beginPath();
+                ctx.fillStyle = (i%2==0)?"#232323":"#D1D1D1";
+                ctx.arc(xReal, yReal, radius-1.1, 0, Math.PI * 2, true); // Outer circle
+                ctx.fill();
+              }
+            }
+          }, 50);
         }
         if(removeArr.length>0){
-          //alert("test!");
           console.log(removeArr);
           for(let i=0;i<removeArr.length;i++){
-            [x,y] = stringToIntPoint(removeArr[i]);
-            xReal = y*smallGrid-radius+44.4;
-            yReal = x*smallGrid-radius+44.4;
+            let [x,y] = stringToIntPoint(removeArr[i]);
+            let xReal = y*smallGrid-radius+44.4;
+            let yReal = x*smallGrid-radius+44.4;
             console.log("x: "+y+"/ y: "+x);
             console.log("xReal: "+xReal+"/ yReal: "+yReal);
             console.log("제거3-"+i)
             ctx.clearRect(xReal,yReal,radius*2,radius*2);
-            let scoreString = (turn == 0)?"white":"black";
+            let scoreClassName = (turn == 0)?"white":"black";
+            let scoreString = (turn == 0)?"백이":"흑이";
             if(turn == 0)
               whiteDead += 1;
             else
               blackDead += 1;
             let dead = (turn == 0)?whiteDead:blackDead;
-            let score = document.getElementsByClassName(scoreString+"Score")[0];
-            score.innerText = scoreString+" 죽은 돌 : "+dead;
-            /*
-            ctx.strokeStyle = "black";
-            ctx.lineWidth = 0.5;
-            ctx.beginPath();
-            ctx.moveTo(xReal+radius, yReal);
-            ctx.lineTo(xReal+radius, yReal+radius*2);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(xReal, yReal+radius);
-            ctx.lineTo(xReal+radius*2, yReal+radius);
-            ctx.stroke();
-            */
+            let score = document.getElementsByClassName(scoreClassName+"Score")[0];
+            score.innerText = scoreString+" 잡은 돌 : "+dead;
           }
         }
         console.log("turn : "+turn);
@@ -278,6 +296,8 @@
     }
   }
   canvas.addEventListener('mousemove', e => {
+    let canvas = document.getElementById('grid');
+    let ctx = canvas.getContext("2d");
     let target = document.getElementById("grid");
     let targetTop = target.getBoundingClientRect().top;
     let targetLeft = target.getBoundingClientRect().left;
@@ -311,11 +331,9 @@
           beforeMouseXY = [xReal, yReal];
           ctx.beginPath();
           ctx.arc(xReal, yReal, radius-1, 0, Math.PI * 2, true); // Outer circle
-          ctx.strokeStyle = (turn==0)?"#232323":"#D1D1D1";
           ctx.fillStyle = (turn==0)?"#232323":"#D1D1D1";
           ctx.globalAlpha = 0.7;
           ctx.fill();
-          ctx.stroke();
           ctx.globalAlpha = 1;
         }
       }
@@ -385,7 +403,7 @@
         //공백과 전혀 안 닿아있을 때
         for(let j=0;j<areaArr.length;j++){
           let [n, m] = stringToIntPoint(areaArr[j]);
-          if(array.includes(intToStringPoint(n,m))==0 && color==arrayAll[n][m] && flagArray[n][m]==0){
+          if(array.includes(intToStringPoint(n,m))==0 && color==arrayAll[n][m]){
           //주변 4개의 돌 중 하나라도 같은 색이고 그 돌이 기존의 그룹 배열에 포함되어있지 않다면
             imsiArr.push(intToStringPoint(n,m));
           }
@@ -442,24 +460,30 @@
             //console.log(areaArr)
             if(findFull(array, areaArr)==1){
               //주변에 4개의 돌이 꽉 차있을때
-              if(findDead(array, areaArr, color)==1){
-                //주변 4개의 돌이 모두 다른 색이면 죽음
-                array[i][j]=0;
-                removeArr.push(intToStringPoint(i,j));
+              if(findDead(array, areaArr, color)==1 && array[i][j] == 2-turn){
+                //주변 4개의 돌이 모두 다른 색이고 방금 클릭한 돌과 죽은 돌이 다른 색이면
+                if(clickArray[clickArray.length-1]!=intToStringPoint(i,j)){
+                  //패가 아니라면
+                  console.log("방금 클릭 : "+intToStringPoint(i,j))
+                  console.log("전 클릭:"+clickArray[clickArray.length-1])
+                  console.log("전전 클릭:"+clickArray[clickArray.length-2])
+                  array[i][j]=0;
+                  removeArr.push(intToStringPoint(i,j));
+                }
+                else {
+                  cantclickArr.push(intToStringPoint(i,j));
+                  console.log("패라서 착수불가.")
+                }
+              }
+              else if(findDead(array, areaArr, color)==1 && array[i][j] == turn+1){
+                //주변 4개의 돌이 모두 다른 색이고 방금 클릭한 돌과 죽은 돌이 같은 색이면
+                cantclickArr.push(intToStringPoint(i,j));
                 console.log("심각한 오류")
               }
               else{
                 //주변 4개의 돌 중 하나라도 같은 색이면
                 areaSameArr.push(intToStringPoint(i,j));
-                //자기자신을 그룹배열에 넣고
-                for(let s=0;s<areaArr.length;s++){
-                  [x, y] = stringToIntPoint(areaArr[s]);
-                  if(array[x][y]==color){
-                    areaSameArr.push(areaArr[s]);
-                    //같은색인 점을 같은그룹배열에 넣음
-                  }
-                }
-                //console.log(areaSameArr)
+                //자기자신을 그룹배열에 넣고=
                 let repeat=0;
                 let real=0;
                 while(1){
@@ -486,6 +510,9 @@
                   }
                   else if(imsiArrLen==areaSameArr.length && array[i][j] == 2-turn){
                     //제거해야 할 대상인데 클릭한 것과 다른 색이면 제거 배열에 추가
+                    //기본적으로 자기 자신과 옆에 있는 돌 하나를 같은그룹 배열에 넣고 시작하므로 배열의 길이는 2로 시작한다
+                    //그래서 repeat이 1에서 2로 갈 때 배열 길이 변화가 없으면 죽은 돌이 아닌데 죽은 돌이라고 인식하므로
+                    //기존 같은그룹배열 길이가 2일 때랑 3 이상일 때로 나누어서 하자.
                     console.log("죽은 돌임");
                     for(let i=0;i<areaSameArr.length;i++){
                       console.log(areaSameArr[i]);
@@ -501,7 +528,6 @@
                     console.log("착수 불가라서 안 죽음");
                     for(let i=0;i<areaSameArr.length;i++){
                       console.log(areaSameArr[i]);
-                      [x,y]=stringToIntPoint(areaSameArr[i]);
                       cantclickArr.push(areaSameArr[i]);
                     }
                     //Array.prototype.push.apply(removeArr, areaSameArr);
@@ -522,6 +548,7 @@
     }
     if(removeArr.length>0 && cantclickArr.length>0){
       //제거 배열도 있고 제거x 배열도 있으면 착수 가능한 상황이라는 것.
+      console.log("착수 가능한 상황")
       cantclickArr = [];
     }
     for(let i=0;i<flagArray.length;i++){

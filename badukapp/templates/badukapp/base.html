@@ -11,7 +11,9 @@
     <meta name="keywords" content="baduk, badukbot, gobot, go, ai, badukmap, randombadukmap, randomgomap, gomap, newgo, newbaduk">
 
     <link rel="shortcut icon" href="#">
-    <link href="https://unpkg.com/tailwindcss/dist/tailwind.min.css" rel="stylesheet">
+    <!--<link href="dist/output.css" rel="stylesheet">-->
+    <!--<link href="https://unpkg.com/tailwindcss@^1.0/dist/tailwind.min.css" rel="stylesheet">-->
+    <link href="{% static 'css/style.css' %}" rel="stylesheet">
     <!--Replace with your tailwind.css once created-->
     <link href="https://fonts.googleapis.com/css?family=Work+Sans:200,400&display=swap" rel="stylesheet">
     <script type="text/javascript" src="http://code.jquery.com/jquery-3.2.0.min.js" ></script>
@@ -219,7 +221,7 @@
 
     <section class="bg-white py-8">
 
-        <div class="container mx-auto flex items-center flex-wrap pt-4 pb-12">
+        <div class="container mx-auto flex items-start flex-wrap pt-4 pb-12">
 
           {% block content %}
 
